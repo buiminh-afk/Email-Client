@@ -81,8 +81,6 @@ void send_email_headers(const Email& email) {
 
 bool sendEmailSMTP(const string& serverIP, int port, const Email& email) {
     struct hostent *hp;
-    string attachmentHeader = "Content-Type: application/octet-stream\r\n";
-    attachmentHeader += "Content-Disposition: attachment; filename=\"";
 
     string noAttachment = "Content-Type: text/plain; charset=UTF-8; format=flowed\r\nContent-Transfer-Encoding: 7bit\r\n\r\n";
     string temp = "";
@@ -158,6 +156,12 @@ bool sendEmailSMTP(const string& serverIP, int port, const Email& email) {
     read_socket(); // Recipient OK
 
     //HEADER--------------------------------------------------------------------------------------------------------------------------------------------------
+
+    if (email.numAttachments != 0) {
+        temp = "Content-Type: multipart/mixed; boundary=\"--boundary-type-1234567892-alt\"\r\n";
+        send_socket(temp.c_str());
+    }
+
     send_email_headers(email);
 
     temp = "TO: " + email.to[0];
@@ -170,11 +174,14 @@ bool sendEmailSMTP(const string& serverIP, int port, const Email& email) {
     temp = "FROM: <" + email.from + ">\r\n";
     send_socket(temp.c_str());
 
-    send_socket("Subject: ");
-    send_socket(email.subject.c_str());
-    send_socket("\r\n");
+    temp = "Subject: " + email.subject + "\r\n";
+    send_socket(temp.c_str());
 
     //if no attachment
+    if (email.numAttachments != 0) {
+        temp = "This is multi-part message in MIME format.\r\n--boundary-type-1234567892-alt\r\n";
+        send_socket(temp.c_str());
+    }
     send_socket(noAttachment.c_str());
 
     // Start of multipart message
@@ -184,9 +191,9 @@ bool sendEmailSMTP(const string& serverIP, int port, const Email& email) {
     // Send attachments
     for (const string& attachment : email.files) {
         send_socket("--boundary-type-1234567892-alt\r\n");
-        send_socket(attachmentHeader.c_str());
-        send_socket(attachment.c_str());
-        send_socket("\"\r\n");
+        temp = "Content-Type: text/plain; charset=UTF-8; name=\"" + attachment + "\"\r\n";
+        temp += "Content-Disposition: attachment; filename=\"" + attachment + "\"\r\n";
+        send_socket(temp.c_str());
         send_socket("Content-Transfer-Encoding: base64\r\n\r\n");
 
         // Read attachment content and encode to Base64
@@ -196,15 +203,16 @@ bool sendEmailSMTP(const string& serverIP, int port, const Email& email) {
             buffer << file.rdbuf();
             file.close();
             string content = buffer.str();
-            string encodedContent = base64::to_base64(content);
+            string encodedContent = base64::to_base64(content) + "\r\n";
             send_socket(encodedContent.c_str());
         } else {
             cerr << "Unable to open file: " << attachment << endl;
         }
-
-        send_socket("\r\n");
     }
 
+    // End of multipart message
+    if (email.numAttachments != 0)
+        send_socket("--boundary-type-1234567892-alt--\r\n");
     send_socket(".\r\n"); // End of data
     read_socket(); 
     send_socket(QUIT); // Quit
@@ -212,6 +220,7 @@ bool sendEmailSMTP(const string& serverIP, int port, const Email& email) {
 
     return true;
 }
+
 
 
 

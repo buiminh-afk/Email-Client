@@ -13,11 +13,11 @@
 
 using namespace std;
 
-const string serverIP = "10.124.2.236";
+const string serverIP = "192.168.56.1";
 const int smtpPort = 2225;
 const int pop3Port = 3335;
 
-#define HELO "HELO 192.168.56.1\r\n"
+#define HELO "EHLO [127.0.0.1]\r\n"
 #define DATA "DATA\r\n"
 #define QUIT "QUIT\r\n"
 
@@ -50,10 +50,42 @@ void read_socket() {
     write(1, buf, len); // Echo to console
 }
 
+// Function to send email headers
+void send_email_headers(const Email& email) {
+    // Add Date header
+    time_t rawtime;
+    struct tm * timeinfo;
+    char buffer[80];
+    time (&rawtime);
+    timeinfo = localtime(&rawtime);
+    strftime(buffer,sizeof(buffer),"%a, %d %b %Y %H:%M:%S %z",timeinfo);
+    string dateHeader = "Date: ";
+    dateHeader += buffer;
+    dateHeader += "\r\n";
+    send_socket(dateHeader.c_str());
+
+    // // Add Message-ID header
+    // string messageIDHeader = "Message-ID: <"; // You may generate a unique ID here
+    // messageIDHeader += /*unique ID*/;
+    // messageIDHeader += "@yourdomain.com>\r\n";
+    // send_socket(messageIDHeader.c_str());
+
+    // Add MIME-Version header
+    string mimeVersionHeader = "MIME-Version: 1.0\r\n";
+    send_socket(mimeVersionHeader.c_str());
+
+    // Add User-Agent header
+    string userAgentHeader = "User-Agent: Mozilla Thunderbird\r\n"; // You may specify your user agent here
+    send_socket(userAgentHeader.c_str());
+}
+
 bool sendEmailSMTP(const string& serverIP, int port, const Email& email) {
     struct hostent *hp;
     string attachmentHeader = "Content-Type: application/octet-stream\r\n";
     attachmentHeader += "Content-Disposition: attachment; filename=\"";
+
+    string noAttachment = "Content-Type: text/plain; charset=UTF-8; format=flowed\r\nContent-Transfer-Encoding: 7bit\r\n\r\n";
+    string temp = "";
 
     // Create Socket
     sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -82,33 +114,70 @@ bool sendEmailSMTP(const string& serverIP, int port, const Email& email) {
         cout << "Connected to SMTP server\n";
     }
 
-    // SMTP communication
+    // SMTP communication-----------------------------------------------------------------------------------------------
     read_socket(); // SMTP Server logon string
     send_socket(HELO); // Introduce ourselves
     read_socket(); // Read reply
+
+    // MAIL FROM-------------------------------------------------------------------------------------------------------------------------------------------
     send_socket("MAIL FROM: "); 
-    send_socket(email.from.c_str());
+    temp = "<" + email.from + ">";
+    send_socket(temp.c_str());
     send_socket("\r\n");
     read_socket(); // Sender OK
+
+    // RCPT TO-------------------------------------------------------------------------------------------------------------------------------------------
     for (const string& recipient : email.to) {
         send_socket("RCPT TO: "); // Mail to
-        send_socket(recipient.c_str());
+        temp = "<" + recipient + ">";
+        send_socket(temp.c_str());
         send_socket("\r\n");
         read_socket(); // Recipient OK
     }
+
+    // CC-------------------------------------------------------------------------------------------------------------------------------------------
+    for (const string& recipient : email.cc) {
+        send_socket("RCPT TO: "); // Mail to
+        temp = "<" + recipient + ">";
+        send_socket(temp.c_str());
+        send_socket("\r\n");
+        read_socket(); // Recipient OK
+    }
+
+    // BCC-------------------------------------------------------------------------------------------------------------------------------------------
+    for (const string& recipient : email.bcc) {
+        send_socket("RCPT TO: "); // Mail to
+        temp = "<" + recipient + ">";
+        send_socket(temp.c_str());
+        send_socket("\r\n");
+        read_socket(); // Recipient OK
+    }
+
+    //DATA--------------------------------------------------------------------------------------------------------------------------------------------------
     send_socket(DATA); // Body to follow
+    read_socket(); // Recipient OK
+
+    //HEADER--------------------------------------------------------------------------------------------------------------------------------------------------
+    send_email_headers(email);
+
+    temp = "TO: " + email.to[0];
+    for (int i = 1; i < email.to.size(); i++) {
+        temp += "," + email.to[i];
+    }
+    temp += "\r\n";
+    send_socket(temp.c_str());
+
+    temp = "FROM: <" + email.from + ">\r\n";
+    send_socket(temp.c_str());
+
     send_socket("Subject: ");
     send_socket(email.subject.c_str());
     send_socket("\r\n");
-    send_socket("MIME-Version: 1.0\r\n");
+
+    //if no attachment
+    send_socket(noAttachment.c_str());
 
     // Start of multipart message
-    send_socket("Content-Type: multipart/mixed; boundary=boundary-type-1234567892-alt\r\n\r\n");
-
-    // Email body
-    send_socket("--boundary-type-1234567892-alt\r\n");
-    send_socket("Content-Type: text/plain; charset=UTF-8\r\n");
-    send_socket("Content-Transfer-Encoding: 7bit\r\n\r\n");
     send_socket(email.content.c_str());
     send_socket("\r\n\r\n");
 
@@ -136,7 +205,6 @@ bool sendEmailSMTP(const string& serverIP, int port, const Email& email) {
         send_socket("\r\n");
     }
 
-    send_socket("--boundary-type-1234567892-alt--\r\n");
     send_socket(".\r\n"); // End of data
     read_socket(); 
     send_socket(QUIT); // Quit
@@ -195,11 +263,15 @@ Email inputEmailInfo() {
     cin >> attachmentOption;
     email.hasAttachment = (attachmentOption == 1);
     if (email.hasAttachment) {
-        cout << "Nhap duong dan toi file muon gui: ";
-        cin.ignore(); // Ignore the newline character
-        getline(cin, temp, '\n');
-        email.files.push_back(temp); // Encode file content to Base64 and add to the email
-        email.numAttachments = 1; // Set the number of attachments to 1
+        cout << "So file muon gui: ";
+        cin >> email.numAttachments;
+        for (int i = 0; i < email.numAttachments; i++) {
+            cout << "Nhap duong dan toi file muon gui: ";
+            cin.ignore(); // Ignore the newline character
+            getline(cin, temp, '\n');
+            email.files.push_back(temp); // Encode file content to Base64 and add to the email
+        }
+        
     }
     return email;
 }
@@ -222,4 +294,4 @@ int main() {
     close(sock);
 
     return 0;
-}
+}   

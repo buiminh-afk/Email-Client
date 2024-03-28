@@ -17,14 +17,14 @@ const string serverIP = "192.168.56.1";
 const int smtpPort = 2225;
 const int pop3Port = 3335;
 
-#define HELO "EHLO [127.0.0.1]\r\n"
+#define HELO "HELO 192.168.56.1\r\n"
 #define DATA "DATA\r\n"
 #define QUIT "QUIT\r\n"
 
 int sock;
 struct sockaddr_in server;
 
-// Định nghĩa cấu trúc Email
+// Define the Email structure
 struct Email {
     vector<string> to;
     string from;
@@ -64,26 +64,55 @@ void send_email_headers(const Email& email) {
     dateHeader += "\r\n";
     send_socket(dateHeader.c_str());
 
-    // // Add Message-ID header
-    // string messageIDHeader = "Message-ID: <"; // You may generate a unique ID here
-    // messageIDHeader += /*unique ID*/;
-    // messageIDHeader += "@yourdomain.com>\r\n";
-    // send_socket(messageIDHeader.c_str());
-
     // Add MIME-Version header
     string mimeVersionHeader = "MIME-Version: 1.0\r\n";
     send_socket(mimeVersionHeader.c_str());
 
-    // Add User-Agent header
-    string userAgentHeader = "User-Agent: Mozilla Thunderbird\r\n"; // You may specify your user agent here
-    send_socket(userAgentHeader.c_str());
+    // Add TO header
+    string toHeader = "TO: ";
+    toHeader += email.to[0]; // Assuming at least one recipient
+    for (size_t i = 1; i < email.to.size(); i++) {
+        toHeader += ", " + email.to[i];
+    }
+    toHeader += "\r\n";
+    send_socket(toHeader.c_str());
+
+    // Add FROM header
+    string fromHeader = "FROM: <" + email.from + ">\r\n";
+    send_socket(fromHeader.c_str());
+
+    // Add CC header if present
+    if (!email.cc.empty()) {
+        string ccHeader = "CC: ";
+        ccHeader += email.cc[0]; // Assuming at least one CC recipient
+        for (size_t i = 1; i < email.cc.size(); i++) {
+            ccHeader += ", " + email.cc[i];
+        }
+        ccHeader += "\r\n";
+        send_socket(ccHeader.c_str());
+    }
+
+    // Add BCC header if present
+    if (!email.bcc.empty()) {
+        string bccHeader = "BCC: ";
+        bccHeader += email.bcc[0]; // Assuming at least one BCC recipient
+        for (size_t i = 1; i < email.bcc.size(); i++) {
+            bccHeader += ", " + email.bcc[i];
+        }
+        bccHeader += "\r\n";
+        send_socket(bccHeader.c_str());
+    }
+
+    // Add Subject header
+    string subjectHeader = "Subject: " + email.subject + "\r\n";
+    send_socket(subjectHeader.c_str());
 }
+
 
 bool sendEmailSMTP(const string& serverIP, int port, const Email& email) {
     struct hostent *hp;
-
-    string noAttachment = "Content-Type: text/plain; charset=UTF-8; format=flowed\r\nContent-Transfer-Encoding: 7bit\r\n\r\n";
-    string temp = "";
+    string attachmentHeader = "Content-Type: application/octet-stream\r\n";
+    attachmentHeader += "Content-Disposition: attachment; filename=\"";
 
     // Create Socket
     sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -112,88 +141,44 @@ bool sendEmailSMTP(const string& serverIP, int port, const Email& email) {
         cout << "Connected to SMTP server\n";
     }
 
-    // SMTP communication-----------------------------------------------------------------------------------------------
+    // SMTP communication
     read_socket(); // SMTP Server logon string
     send_socket(HELO); // Introduce ourselves
     read_socket(); // Read reply
-
-    // MAIL FROM-------------------------------------------------------------------------------------------------------------------------------------------
     send_socket("MAIL FROM: "); 
-    temp = "<" + email.from + ">";
-    send_socket(temp.c_str());
+    send_socket(email.from.c_str());
     send_socket("\r\n");
     read_socket(); // Sender OK
-
-    // RCPT TO-------------------------------------------------------------------------------------------------------------------------------------------
+    
+    // Loop through each recipient in the "To" field
     for (const string& recipient : email.to) {
         send_socket("RCPT TO: "); // Mail to
-        temp = "<" + recipient + ">";
-        send_socket(temp.c_str());
+        send_socket(recipient.c_str());
         send_socket("\r\n");
         read_socket(); // Recipient OK
     }
-
-    // CC-------------------------------------------------------------------------------------------------------------------------------------------
-    for (const string& recipient : email.cc) {
-        send_socket("RCPT TO: "); // Mail to
-        temp = "<" + recipient + ">";
-        send_socket(temp.c_str());
-        send_socket("\r\n");
-        read_socket(); // Recipient OK
-    }
-
-    // BCC-------------------------------------------------------------------------------------------------------------------------------------------
-    for (const string& recipient : email.bcc) {
-        send_socket("RCPT TO: "); // Mail to
-        temp = "<" + recipient + ">";
-        send_socket(temp.c_str());
-        send_socket("\r\n");
-        read_socket(); // Recipient OK
-    }
-
-    //DATA--------------------------------------------------------------------------------------------------------------------------------------------------
+    
+    // Start email data transmission
     send_socket(DATA); // Body to follow
-    read_socket(); // Recipient OK
-
-    //HEADER--------------------------------------------------------------------------------------------------------------------------------------------------
-
-    if (email.numAttachments != 0) {
-        temp = "Content-Type: multipart/mixed; boundary=\"--boundary-type-1234567892-alt\"\r\n";
-        send_socket(temp.c_str());
-    }
-
-    send_email_headers(email);
-
-    temp = "TO: " + email.to[0];
-    for (int i = 1; i < email.to.size(); i++) {
-        temp += "," + email.to[i];
-    }
-    temp += "\r\n";
-    send_socket(temp.c_str());
-
-    temp = "FROM: <" + email.from + ">\r\n";
-    send_socket(temp.c_str());
-
-    temp = "Subject: " + email.subject + "\r\n";
-    send_socket(temp.c_str());
-
-    //if no attachment
-    if (email.numAttachments != 0) {
-        temp = "This is multi-part message in MIME format.\r\n--boundary-type-1234567892-alt\r\n";
-        send_socket(temp.c_str());
-    }
-    send_socket(noAttachment.c_str());
+    send_email_headers(email); // Add email headers
+    send_socket("MIME-Version: 1.0\r\n");
 
     // Start of multipart message
+    send_socket("Content-Type: multipart/mixed; boundary=boundary-type-1234567892-alt\r\n\r\n");
+
+    // Email body
+    send_socket("--boundary-type-1234567892-alt\r\n");
+    send_socket("Content-Type: text/plain; charset=UTF-8\r\n");
+    send_socket("Content-Transfer-Encoding: 7bit\r\n\r\n");
     send_socket(email.content.c_str());
     send_socket("\r\n\r\n");
 
     // Send attachments
     for (const string& attachment : email.files) {
         send_socket("--boundary-type-1234567892-alt\r\n");
-        temp = "Content-Type: text/plain; charset=UTF-8; name=\"" + attachment + "\"\r\n";
-        temp += "Content-Disposition: attachment; filename=\"" + attachment + "\"\r\n";
-        send_socket(temp.c_str());
+        send_socket(attachmentHeader.c_str());
+        send_socket(attachment.c_str());
+        send_socket("\"\r\n");
         send_socket("Content-Transfer-Encoding: base64\r\n\r\n");
 
         // Read attachment content and encode to Base64
@@ -203,18 +188,19 @@ bool sendEmailSMTP(const string& serverIP, int port, const Email& email) {
             buffer << file.rdbuf();
             file.close();
             string content = buffer.str();
-            string encodedContent = base64::to_base64(content) + "\r\n";
+            string encodedContent = base64::to_base64(content);
             send_socket(encodedContent.c_str());
         } else {
             cerr << "Unable to open file: " << attachment << endl;
         }
+
+        send_socket("\r\n");
     }
 
-    // End of multipart message
-    if (email.numAttachments != 0)
-        send_socket("--boundary-type-1234567892-alt--\r\n");
+    send_socket("--boundary-type-1234567892-alt--\r\n");
     send_socket(".\r\n"); // End of data
-    read_socket(); 
+    read_socket(); // Read reply
+
     send_socket(QUIT); // Quit
     read_socket(); // Log off
 
@@ -222,14 +208,12 @@ bool sendEmailSMTP(const string& serverIP, int port, const Email& email) {
 }
 
 
-
-
-// Hàm nhập thông tin email từ người dùng
+// Function to input email information from the user
 Email inputEmailInfo() {
     Email email;
     string temp;
 
-    cout << "Day la thong tin soan email: (neu khong dien vui long nhan ENTER de bo qua)\n";
+    cout << "This is email composition information: (Press ENTER to skip)\n";
     cout << "From: ";
     getline(cin, email.from, '\n');
     cout << email.from << endl;
@@ -262,25 +246,29 @@ Email inputEmailInfo() {
     }
 
     cout << "Subject: ";
-    getline(cin,email.subject, '\n');
+    getline(cin, email.subject, '\n');
 
     cout << "Content: ";
-    getline(cin,email.content, '\n');
+    getline(cin, email.content, '\n');
 
-    cout << "Co gui kem file (1. Co, 2. Khong): ";
+    cout << "Attach files? (1. Yes, 2. No): ";
     int attachmentOption;
     cin >> attachmentOption;
     email.hasAttachment = (attachmentOption == 1);
+
     if (email.hasAttachment) {
-        cout << "So file muon gui: ";
+        cout << "Number of files to attach: ";
         cin >> email.numAttachments;
-        for (int i = 0; i < email.numAttachments; i++) {
-            cout << "Nhap duong dan toi file muon gui: ";
-            cin.ignore(); // Ignore the newline character
-            getline(cin, temp, '\n');
-            email.files.push_back(temp); // Encode file content to Base64 and add to the email
-        }
         
+        // Clear newline character from the input stream
+        cin.ignore();
+        
+        for (int i = 0; i < email.numAttachments; i++) {
+            cout << "Enter the path to file " << i + 1 << ": ";
+            getline(cin, temp, '\n');
+            email.files.push_back(temp);
+            temp.clear();
+        }
     }
     return email;
 }
@@ -303,4 +291,4 @@ int main() {
     close(sock);
 
     return 0;
-}   
+}

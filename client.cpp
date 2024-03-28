@@ -158,6 +158,22 @@ bool sendEmailSMTP(const string& serverIP, int port, const Email& email) {
         read_socket(); // Recipient OK
     }
     
+    // Loop through each recipient in the "To" field
+    for (const string& recipient : email.cc) {
+        send_socket("RCPT TO: "); // Mail to
+        send_socket(recipient.c_str());
+        send_socket("\r\n");
+        read_socket(); // Recipient OK
+    }
+
+    // Loop through each recipient in the "To" field
+    for (const string& recipient : email.bcc) {
+        send_socket("RCPT TO: "); // Mail to
+        send_socket(recipient.c_str());
+        send_socket("\r\n");
+        read_socket(); // Recipient OK
+    }
+
     // Start email data transmission
     send_socket(DATA); // Body to follow
     send_email_headers(email); // Add email headers

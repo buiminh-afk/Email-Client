@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <sstream> 
+#include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -16,6 +17,10 @@ using namespace std;
 const string serverIP = "192.168.56.1";
 const int smtpPort = 2225;
 const int pop3Port = 3335;
+const string username = "buinguyennhatminh911@gmail.com";
+const string password = "09112003Minh!!\\";
+int last_email_id = 0;
+
 
 #define HELO "HELO 192.168.56.1\r\n"
 #define DATA "DATA\r\n"
@@ -223,17 +228,14 @@ bool sendEmailSMTP(const string& serverIP, int port, const Email& email) {
     return true;
 }
 
-
 // Function to input email information from the user
-Email inputEmailInfo() {
+Email inputEmailInfo() {        
     Email email;
     string temp;
 
     cout << "This is email composition information: (Press ENTER to skip)\n";
     cout << "From: ";
     getline(cin, email.from, '\n');
-    cout << email.from << endl;
-
     cout << "To: ";
     getline(cin, temp, '\n');
     if (!temp.empty()) {
@@ -289,22 +291,111 @@ Email inputEmailInfo() {
     return email;
 }
 
+string read_socket_pop3() {
+    char buf[BUFSIZ+1];
+    int len = read(sock, buf, BUFSIZ);
+    if (len == -1) {
+        perror("read");
+        return ""; // Trả về chuỗi rỗng nếu có lỗi khi đọc
+    }
+    buf[len] = '\0'; // Đảm bảo kết thúc chuỗi bằng ký tự null
+    return string(buf); // Chuyển đổi buf thành một chuỗi string và trả về
+}
 
 
-int main() {
-    // Nhập thông tin email từ người dùng
-    Email email = inputEmailInfo();
-
-    // Gửi email
-    bool sent = sendEmailSMTP(serverIP, smtpPort, email);
-    if (sent) {
-        cout << "Email sent successfully.\n";
-    } else {
-        cout << "Failed to send email.\n";
+// Hàm kết nối đến máy chủ POP3
+int connectToPOP3Server(const string& serverIP, int port) {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock == -1) {
+        perror("socket");
+        return -1;
     }
 
-    // Đóng socket
+    struct sockaddr_in serverAddr;
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(port);
+    inet_pton(AF_INET, serverIP.c_str(), &serverAddr.sin_addr);
+
+    if (connect(sock, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
+        perror("connect");
+        close(sock);
+        return -1;
+    }
+
+    return sock;
+}
+
+void getEmailsFromPOP3Server(const string& serverIP, int port) {
+    sock = connectToPOP3Server(serverIP, port);
+    if (sock == -1) {
+        cerr << "Failed to connect to POP3 server" << endl;
+        return;
+    }
+
+    // Đăng nhập
+    string temp = "USER " + username + "\r\n";
+    send_socket(temp.c_str());
+    read_socket(); // Đọc phản hồi từ máy chủ
+
+    temp = "PASS " + password + "\r\n";
+    send_socket(temp.c_str());
+    read_socket_pop3(); // Đọc phản hồi từ máy chủ
+
+    //Gui lenh STAT
+    send_socket("STAT\r\n");
+    string res = read_socket_pop3(); // Đọc phản hồi từ máy chủ
+
+    // Gửi lệnh LIST để lấy danh sách các email
+    send_socket("LIST\r\n");
+    res = read_socket_pop3(); // Đọc phản hồi từ máy chủ
+    if (res == "+OK 0 0\r\n") {
+        cout << "No emails in the mailbox." << endl;
+        close(sock);
+        return;
+    }
     close(sock);
+}
+
+int main() {
+    int choice = 0;
+    while (choice != 3)  {
+        cout << "Vui long chon menu: " << endl;
+        cout << "1. De gui email" << endl;
+        cout << "2. De xem danh sach cac email da nhan" << endl;
+        cout << "3. Thoat" << endl;
+        cout << "Ban chon: "; cin >> choice;
+        while (choice < 1 || choice > 3) {
+            cout << "Vui long nhap lai lua chon: "; 
+            cin >> choice;
+        }
+        switch (choice)
+        {
+        case 1: {
+            cin.ignore();
+            // Nhập thông tin email từ người dùng
+            Email email = inputEmailInfo();
+            // Gửi email
+            bool sent = sendEmailSMTP(serverIP, smtpPort, email);
+            if (sent) {
+                cout << "Email sent successfully.\n";
+            } else {
+                cout << "Failed to send email.\n";
+            }
+            close(sock);
+            break;
+        }
+        case 2: {
+            getEmailsFromPOP3Server(serverIP,pop3Port);
+            cout << "LAY EMAIL" << endl;
+            break;
+        }
+        case 3:
+            break;
+        }
+    }
+    
+
+    // Đóng socket
 
     return 0;
 }

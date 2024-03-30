@@ -23,6 +23,11 @@ int last_email_id = 0;
 
 
 #define HELO "HELO 192.168.56.1\r\n"
+#define USER "USER your_username\r\n"
+#define PASS "PASS your_password\r\n"
+#define LIST "LIST\r\n"
+#define RETR "RETR "
+#define HELO "EHLO [127.0.0.1]\r\n"
 #define DATA "DATA\r\n"
 #define QUIT "QUIT\r\n"
 
@@ -228,8 +233,103 @@ bool sendEmailSMTP(const string& serverIP, int port, const Email& email) {
     return true;
 }
 
-// Function to input email information from the user
-Email inputEmailInfo() {        
+// Function to send login credentials to the server and check response
+bool login(const string& username, const string& password) {
+    // Send username
+    string userCommand = "USER " + username + "\r\n";
+    send_socket(userCommand.c_str());
+    read_socket(); // Read reply
+
+    // Send password
+    string passCommand = "PASS " + password + "\r\n";
+    send_socket(passCommand.c_str());
+    read_socket(); // Read reply
+
+    // Read the response after sending password
+    char buf[BUFSIZ+1];
+    int len = read(sock, buf, BUFSIZ);
+    buf[len] = '\0';
+    string response(buf);
+
+    // Check if login was successful
+    if (response.find("+OK") != string::npos) {
+        cout << "Login successful.\n";
+        return true;
+    } else {
+        cout << "Login failed.\n";
+        return false;
+    }
+}
+
+// Function to receive email from POP3 server
+void listEmail(const string& serverIP, int port, const string& username, const string& password) { 
+    struct hostent *hp;
+
+    // Create Socket
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock == -1) {
+        perror("opening stream socket");
+        exit(1);
+    } else {
+        cout << "Socket created\n";
+    }
+
+    // Verify host
+    server.sin_family = AF_INET;
+    hp = gethostbyname(serverIP.c_str());
+    if (hp == nullptr) {
+        fprintf(stderr, "%s: unknown host\n", serverIP.c_str());
+        exit(2);
+    }
+
+    // Connect to POP3 server
+    memcpy((char *) &server.sin_addr, (char *) hp->h_addr, hp->h_length);
+    server.sin_port = htons(port);
+    if (connect(sock, (struct sockaddr *) &server, sizeof(server)) == -1) {
+        perror("connecting stream socket");
+        exit(1);
+    } else {
+        cout << "Connected to POP3 server\n";
+    }
+
+
+    if (login(username,password))
+
+    // List emails
+    send_socket(LIST);
+    char buf[BUFSIZ+1];
+    int len = read(sock, buf, BUFSIZ);// Read reply
+    buf[len] = '\0';
+    string response(buf);
+
+    // Check if login was successful
+    if (response.find(".") != string::npos) {
+    	cout << "choose email to read (number of index, 0 to exit): ";
+	string index;
+	cin >> index;
+	if(index == "0"){
+	    send_socket(QUIT);
+	    read_socket();
+	    close(sock);
+	    return;
+	}
+	send_socket(RETR);
+    	send_socket(index.c_str());
+        send_socket("\r\n");
+        read_socket(); // Recipient OK
+
+    } 
+    send_socket(QUIT); // Quit
+    read_socket(); // Log off
+    
+    // Close socket
+    close(sock);
+}
+
+
+
+// Hàm nhập thông tin email từ người dùng
+Email inputEmailInfo() {
     Email email;
     string temp;
 
@@ -291,111 +391,89 @@ Email inputEmailInfo() {
     return email;
 }
 
-string read_socket_pop3() {
-    char buf[BUFSIZ+1];
-    int len = read(sock, buf, BUFSIZ);
-    if (len == -1) {
-        perror("read");
-        return ""; // Trả về chuỗi rỗng nếu có lỗi khi đọc
-    }
-    buf[len] = '\0'; // Đảm bảo kết thúc chuỗi bằng ký tự null
-    return string(buf); // Chuyển đổi buf thành một chuỗi string và trả về
-}
+void readEmail(const string& serverIP, int port, const string& username, const string& password, const string& index) {
+    struct hostent *hp;
 
-
-// Hàm kết nối đến máy chủ POP3
-int connectToPOP3Server(const string& serverIP, int port) {
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    // Create Socket
+    sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock == -1) {
-        perror("socket");
-        return -1;
+        perror("opening stream socket");
+        exit(1);
+    } else {
+        cout << "Socket created\n";
     }
 
-    struct sockaddr_in serverAddr;
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(port);
-    inet_pton(AF_INET, serverIP.c_str(), &serverAddr.sin_addr);
-
-    if (connect(sock, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
-        perror("connect");
-        close(sock);
-        return -1;
+    // Verify host
+    server.sin_family = AF_INET;
+    hp = gethostbyname(serverIP.c_str());
+    if (hp == nullptr) {
+        fprintf(stderr, "%s: unknown host\n", serverIP.c_str());
+        exit(2);
     }
 
-    return sock;
-}
-
-void getEmailsFromPOP3Server(const string& serverIP, int port) {
-    sock = connectToPOP3Server(serverIP, port);
-    if (sock == -1) {
-        cerr << "Failed to connect to POP3 server" << endl;
-        return;
+    // Connect to POP3 server
+    memcpy((char *) &server.sin_addr, (char *) hp->h_addr, hp->h_length);
+    server.sin_port = htons(port);
+    if (connect(sock, (struct sockaddr *) &server, sizeof(server)) == -1) {
+        perror("connecting stream socket");
+        exit(1);
+    } else {
+        cout << "Connected to POP3 server\n";
     }
 
-    // Đăng nhập
-    string temp = "USER " + username + "\r\n";
-    send_socket(temp.c_str());
-    read_socket(); // Đọc phản hồi từ máy chủ
 
-    temp = "PASS " + password + "\r\n";
-    send_socket(temp.c_str());
-    read_socket_pop3(); // Đọc phản hồi từ máy chủ
+    if (login(username,password)){
 
-    //Gui lenh STAT
-    send_socket("STAT\r\n");
-    string res = read_socket_pop3(); // Đọc phản hồi từ máy chủ
-
-    // Gửi lệnh LIST để lấy danh sách các email
-    send_socket("LIST\r\n");
-    res = read_socket_pop3(); // Đọc phản hồi từ máy chủ
-    if (res == "+OK 0 0\r\n") {
-        cout << "No emails in the mailbox." << endl;
-        close(sock);
-        return;
+    	send_socket(RETR);
+    	send_socket(index.c_str());
+        send_socket("\r\n");
+        read_socket(); // Recipient OK
+        send_socket(QUIT); // Quit
+    	read_socket(); // Log off
+    
+    // Close socket
+    	close(sock);
     }
+    else{
+    send_socket(QUIT); // Quit
+    read_socket(); // Log off
+    
+    // Close socket
     close(sock);
+    cout << "out";
+    }
+
 }
 
 int main() {
-    int choice = 0;
-    while (choice != 3)  {
-        cout << "Vui long chon menu: " << endl;
-        cout << "1. De gui email" << endl;
-        cout << "2. De xem danh sach cac email da nhan" << endl;
-        cout << "3. Thoat" << endl;
-        cout << "Ban chon: "; cin >> choice;
-        while (choice < 1 || choice > 3) {
-            cout << "Vui long nhap lai lua chon: "; 
-            cin >> choice;
-        }
-        switch (choice)
-        {
-        case 1: {
-            cin.ignore();
-            // Nhập thông tin email từ người dùng
-            Email email = inputEmailInfo();
-            // Gửi email
-            bool sent = sendEmailSMTP(serverIP, smtpPort, email);
-            if (sent) {
-                cout << "Email sent successfully.\n";
-            } else {
-                cout << "Failed to send email.\n";
-            }
-            close(sock);
-            break;
-        }
-        case 2: {
-            getEmailsFromPOP3Server(serverIP,pop3Port);
-            cout << "LAY EMAIL" << endl;
-            break;
-        }
-        case 3:
-            break;
-        }
-    }
-    
+    // Nhập thông tin email từ người dùng
+    // Email email = inputEmailInfo();
 
+    // // Gửi email
+    // bool sent = sendEmailSMTP(serverIP, smtpPort, email);
+    // if (sent) {
+    //     cout << "Email sent successfully.\n";
+    // } else {
+    //     cout << "Failed to send email.\n";
+    // }
+
+    string username, password;
+    cout << "Username: ";
+    cin >> username;
+    cout << "Password: ";
+    cin >> password;
+
+    // Nhận email từ server POP3
+    listEmail(serverIP, pop3Port, username, password);
+    /*
+    string index;
+    cout << "Choose email to read: ";
+    cin >> index;
+    cout << index;
+    readEmail(serverIP, pop3Port, username, password, index);
+	*/
     // Đóng socket
 
     return 0;
-}
+}   
+

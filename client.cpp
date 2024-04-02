@@ -14,25 +14,55 @@
 
 using namespace std;
 
-const string serverIP = "192.168.56.1";
-const int smtpPort = 2225;
-const int pop3Port = 3335;
-const string username = "buinguyennhatminh911@gmail.com";
-const string password = "09112003Minh!!\\";
+string serverIP = "";
+int smtpPort;
+int pop3Port;
+string username = "";
+string password = "";
 int last_email_id = 0;
 
+int sock;
+struct sockaddr_in server;
 
 #define HELO "HELO 192.168.56.1\r\n"
 #define USER "USER your_username\r\n"
 #define PASS "PASS your_password\r\n"
 #define LIST "LIST\r\n"
 #define RETR "RETR "
-#define HELO "EHLO [127.0.0.1]\r\n"
+// #define HELO "EHLO [127.0.0.1]\r\n"
 #define DATA "DATA\r\n"
 #define QUIT "QUIT\r\n"
 
-int sock;
-struct sockaddr_in server;
+// doc file config
+void readConfigFromFile(const std::string& filename) {
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "Failed to open file: " << filename << std::endl;
+        return;
+    }
+
+    std::string line;
+    while (std::getline(file >> std::ws, line)) { // Skip leading white spaces
+        size_t pos = line.find(": ");
+        if (pos != std::string::npos) {
+            std::string key = line.substr(0, pos);
+            std::string value = line.substr(pos + 2); // Skip ": " after the key
+            if (key == "Username") {
+                username = value;
+            } else if (key == "Password") {
+                password = value;
+            } else if (key == "MailServer") {
+                serverIP = value;
+            } else if (key == "SMTP") {
+                smtpPort = std::stoi(value);
+            } else if (key == "POP3") {
+                pop3Port = std::stoi(value);
+            }
+        }
+    }
+
+    file.close();
+}
 
 // Define the Email structure
 struct Email {
@@ -117,7 +147,6 @@ void send_email_headers(const Email& email) {
     string subjectHeader = "Subject: " + email.subject + "\r\n";
     send_socket(subjectHeader.c_str());
 }
-
 
 bool sendEmailSMTP(const string& serverIP, int port, const Email& email) {
     struct hostent *hp;
@@ -326,8 +355,6 @@ void listEmail(const string& serverIP, int port, const string& username, const s
     close(sock);
 }
 
-
-
 // Hàm nhập thông tin email từ người dùng
 Email inputEmailInfo() {
     Email email;
@@ -446,6 +473,8 @@ void readEmail(const string& serverIP, int port, const string& username, const s
 }
 
 int main() {
+    readConfigFromFile("config.txt");
+    cout << serverIP << endl;
     // Nhập thông tin email từ người dùng
     // Email email = inputEmailInfo();
 
@@ -456,12 +485,6 @@ int main() {
     // } else {
     //     cout << "Failed to send email.\n";
     // }
-
-    string username, password;
-    cout << "Username: ";
-    cin >> username;
-    cout << "Password: ";
-    cin >> password;
 
     // Nhận email từ server POP3
     listEmail(serverIP, pop3Port, username, password);

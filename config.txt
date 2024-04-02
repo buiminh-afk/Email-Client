@@ -1,0 +1,6 @@
+General:
+Username: buinguyennhatminh911@gmail.com
+Password: 09112003Minh!!\
+MailServer: 192.168.56.1
+SMTP: 2225
+POP3: 3335

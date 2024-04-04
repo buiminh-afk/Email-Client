@@ -11,29 +11,57 @@
 #include <netdb.h>
 #include <fstream>
 #include "base64.hpp"
-
 using namespace std;
 
-const string serverIP = "192.168.56.1";
-const int smtpPort = 2225;
-const int pop3Port = 3335;
-const string username = "buinguyennhatminh911@gmail.com";
-const string password = "09112003Minh!!\\";
+string serverIP = "";
+int smtpPort;
+int pop3Port;
+string username = "";
+string password = "";
 int last_email_id = 0;
 
+int sock;
+struct sockaddr_in server;
 
 #define HELO "HELO 192.168.56.1\r\n"
 #define USER "USER your_username\r\n"
 #define PASS "PASS your_password\r\n"
 #define LIST "LIST\r\n"
 #define RETR "RETR "
-#define HELO "EHLO [127.0.0.1]\r\n"
+// #define HELO "EHLO [127.0.0.1]\r\n"
 #define DATA "DATA\r\n"
 #define QUIT "QUIT\r\n"
 
-int sock;
-struct sockaddr_in server;
+// doc file config
+void readConfigFromFile(const std::string& filename) {
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "Failed to open file: " << filename << std::endl;
+        return;
+    }
 
+    std::string line;
+    while (std::getline(file >> std::ws, line)) { // Skip leading white spaces
+        size_t pos = line.find(": ");
+        if (pos != std::string::npos) {
+            std::string key = line.substr(0, pos);
+            std::string value = line.substr(pos + 2); // Skip ": " after the key
+            if (key == "Username") {
+                username = value;
+            } else if (key == "Password") {
+                password = value;
+            } else if (key == "MailServer") {
+                serverIP = value;
+            } else if (key == "SMTP") {
+                smtpPort = std::stoi(value);
+            } else if (key == "POP3") {
+                pop3Port = std::stoi(value);
+            }
+        }
+    }
+
+    file.close();
+}
 // Define the Email structure
 struct Email {
     vector<string> to;
@@ -46,6 +74,26 @@ struct Email {
     int numAttachments;
     vector<string> files;
 };
+
+// Hàm giải mã base64
+string base64_decode(const string &in) {
+    string out;
+    vector<int> T(256, -1);
+    for (int i = 0; i < 64; i++) {
+        T["ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"[i]] = i;
+    }
+    int val = 0, valb = -8;
+    for (unsigned char c : in) {
+        if (T[c] == -1) break;
+        val = (val << 6) + T[c];
+        valb += 6;
+        if (valb >= 0) {
+            out.push_back(char((val >> valb) & 0xFF));
+            valb -= 8;
+        }
+    }
+    return out;
+}
 
 // Function to send data to the socket
 void send_socket(const char *s) {
@@ -233,6 +281,71 @@ bool sendEmailSMTP(const string& serverIP, int port, const Email& email) {
     return true;
 }
 
+Email parseEmail(const string& emailString) {
+    Email email;
+
+    stringstream ss(emailString);
+    string line;
+    string boundary;
+
+    while (getline(ss, line)) {
+        if (line.empty()) continue;
+
+        if (line.find("TO: ") == 0) {
+            email.to.push_back(line.substr(4));
+        } else if (line.find("FROM: ") == 0) {
+            email.from = line.substr(6);
+            //cout << email.from;
+        } else if (line.find("CC: ") == 0) {
+            email.cc.push_back(line.substr(4));
+        } else if (line.find("BCC: ") == 0) {
+            email.bcc.push_back(line.substr(5));
+        } else if (line.find("Subject: ") == 0) {
+            email.subject = line.substr(8);
+            //cout << email.subject;
+        } else if (line.find("Content-Type: text/plain") != string::npos) {
+            // Skip lines until reach the content part
+            while (getline(ss, line) && line.find("Content-Transfer-Encoding:") == string::npos);
+            // Skip one more line
+            getline(ss, line);
+            // Read content until boundary
+            string content;
+            while (getline(ss, line) && line.find("--" + boundary) == string::npos) {
+                content += line + "\n";
+            }
+            email.content = content;
+        } else if (line.find("Content-Disposition: attachment") != string::npos) {
+         
+            // Xử lý phần đính kèm
+            email.hasAttachment = true;
+            // Skip lines until reach the filename part
+            // Extract filename
+
+            size_t pos = line.find("\""); 
+                string filename = line.substr(pos + 1, line.find("\"", pos + 1) - pos - 1);
+                cout << filename<<endl;
+                getline(ss, line);
+                getline(ss, line);
+                string content;
+                while (getline(ss, line) && line.find("--" + boundary) == string::npos) {
+        		content += line + "\n";
+    		}
+    		//cout << content<<endl;
+                // Decode base64 content
+                string decoded_content = base64_decode(content);
+                cout << decoded_content<<endl;
+                // Save filename and content to vector
+                email.files.push_back("name"+filename+ "\n"+ decoded_content);
+               
+        } else if (line.find("boundary=") != string::npos) {
+            size_t pos = line.find("boundary=");
+            boundary = line.substr(pos + 9);
+        }
+    }
+
+    return email;
+}
+
 // Function to send login credentials to the server and check response
 bool login(const string& username, const string& password) {
     // Send username
@@ -301,8 +414,10 @@ void listEmail(const string& serverIP, int port, const string& username, const s
     int len = read(sock, buf, BUFSIZ);// Read reply
     buf[len] = '\0';
     string response(buf);
+    cout << response;
 
     // Check if login was successful
+    string temp;
     if (response.find(".") != string::npos) {
     	cout << "choose email to read (number of index, 0 to exit): ";
 	string index;
@@ -310,15 +425,32 @@ void listEmail(const string& serverIP, int port, const string& username, const s
 	if(index == "0"){
 	    send_socket(QUIT);
 	    read_socket();
+	    
+	    
 	    close(sock);
 	    return;
 	}
 	send_socket(RETR);
     	send_socket(index.c_str());
         send_socket("\r\n");
-        read_socket(); // Recipient OK
-
+        //read_socket(); // Recipient OK
+        char buff[BUFSIZ+1];
+	int leng = read(sock, buff, BUFSIZ);
+	temp = buff ;
+	
+	
     } 
+    Email result;
+    if (temp.find("-alt--") != string::npos){
+	cout << temp;
+	result = parseEmail(temp);
+	}
+    cout << result.from<<endl;
+    cout << result.subject<<endl;
+	for(int i = 0 ; i< result.files.size();i++)
+	//if(result.hasAttachment)
+		cout << result.files[i];
+
     send_socket(QUIT); // Quit
     read_socket(); // Log off
     
@@ -447,6 +579,9 @@ void readEmail(const string& serverIP, int port, const string& username, const s
 
 int main() {
     // Nhập thông tin email từ người dùng
+    readConfigFromFile("config.txt");
+    
+
     // Email email = inputEmailInfo();
 
     // // Gửi email
@@ -457,12 +592,13 @@ int main() {
     //     cout << "Failed to send email.\n";
     // }
 
+/*
     string username, password;
     cout << "Username: ";
     cin >> username;
     cout << "Password: ";
     cin >> password;
-
+*/
     // Nhận email từ server POP3
     listEmail(serverIP, pop3Port, username, password);
     /*

@@ -21,9 +21,11 @@ int smtpPort;
 int pop3Port;
 string username = "";
 
+
 string password = "";
 map<string, vector<string>> filters;
 int autoload;
+
 int last_email_id = 0;
 
 int sock;
@@ -37,7 +39,6 @@ struct sockaddr_in server;
 // #define HELO "EHLO [127.0.0.1]\r\n"
 #define DATA "DATA\r\n"
 #define QUIT "QUIT\r\n"
-
 
 
 // doc file config
@@ -289,7 +290,6 @@ void send_email_headers(const Email& email) {
     string subjectHeader = "Subject: " + email.subject + "\r\n";
     send_socket(subjectHeader.c_str());
 }
-
 
 bool sendEmailSMTP(const string& serverIP, int port, const Email& email) {
     struct hostent *hp;
@@ -581,8 +581,6 @@ void listEmail(const string& serverIP, int port, const string& username, const s
     close(sock);
 }
 
-
-
 // Hàm nhập thông tin email từ người dùng
 Email inputEmailInfo() {
     Email email;
@@ -701,7 +699,10 @@ void readEmail(const string& serverIP, int port, const string& username, const s
 }
 
 int main() {
+    readConfigFromFile("config.txt");
+    cout << serverIP << endl;
     // Nhập thông tin email từ người dùng
+
     readConfigFromFile("config.txt");
     //readConfigFromJSON("filter.json");
   cout << "Username: " << username << "abc"<<endl;
@@ -711,6 +712,7 @@ int main() {
   cout << "SMTP Port: " << smtpPort << endl;
   cout << "POP3 Port: " << pop3Port << endl;
   //cout << "Autoload: " << autoload << endl;
+
 
     // Nhận email từ server POP3
     listEmail(serverIP, pop3Port, tmp, password);

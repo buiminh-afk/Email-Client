@@ -11,13 +11,19 @@
 #include <netdb.h>
 #include <fstream>
 #include "base64.hpp"
+#include "json.hpp"
+
 using namespace std;
+using json = nlohmann::json;
 
 string serverIP = "";
 int smtpPort;
 int pop3Port;
 string username = "";
+
 string password = "";
+map<string, vector<string>> filters;
+int autoload;
 int last_email_id = 0;
 
 int sock;
@@ -31,6 +37,8 @@ struct sockaddr_in server;
 // #define HELO "EHLO [127.0.0.1]\r\n"
 #define DATA "DATA\r\n"
 #define QUIT "QUIT\r\n"
+
+
 
 // doc file config
 void readConfigFromFile(const std::string& filename) {
@@ -61,6 +69,69 @@ void readConfigFromFile(const std::string& filename) {
     }
 
     file.close();
+}
+
+
+// Hàm để đọc cấu hình từ file JSON
+void readConfigFromJSON(const string &filename)
+{
+  ifstream file(filename);
+  if (!file.is_open())
+  {
+    cerr << "Failed to open file: " << filename << endl;
+    return;
+  }
+
+  // Đọc dữ liệu từ file JSON vào một đối tượng json
+  json j;
+  file >> j;
+
+  // Kiểm tra xem có trường "Username", "Password", "MailServer", "SMTP", "POP3", "Autoload" trong file JSON hay không
+  username = j["Username"];
+  password = j["Password"];
+  serverIP = j["MailServer"];
+  smtpPort = j["SMTP"];
+  pop3Port = j["Pop3"]; // Sửa thành "Pop3"
+  autoload = j["Autoload"];
+
+  // Đọc các bộ lọc từ JSON
+  if (j.find("Filter") != j.end())
+  {
+    json filter = j["Filter"];
+    for (json::iterator it = filter.begin(); it != filter.end(); ++it)
+    {
+      vector<string> keys;
+      json keyJson = filter[it.key()]["key"];
+      for (const auto &key : keyJson)
+      {
+        keys.push_back(key);
+      }
+      filters[it.key()] = keys;
+    }
+  }
+
+  file.close();
+}
+
+// Hàm tính kích thước của file
+long long getFileSize(const string &filename)
+{
+  // Mở file để đọc dưới dạng nhị phân
+  ifstream file(filename, ios::binary);
+  if (!file.is_open())
+  {
+    cerr << "Failed to open file: " << filename << endl;
+    return -1;
+  }
+
+  // Di chuyển con trỏ tới cuối file để lấy kích thước
+  file.seekg(0, ios::end);
+  long long size = file.tellg();
+
+  // Đóng file
+  file.close();
+
+  return size;
 }
 // Define the Email structure
 struct Email {
@@ -106,6 +177,59 @@ void read_socket() {
     char buf[BUFSIZ+1];
     int len = read(sock, buf, BUFSIZ);
     write(1, buf, len); // Echo to console
+}
+
+void downEmail(const Email& email, const string& path) {
+    ofstream outputFile(path + "/" + email.subject + ".txt"); 
+    if (!outputFile.is_open()) {
+        cerr << "Unable to open file for writing." << endl;
+        return;
+    }
+
+    // Ghi dữ liệu từ biến email vào file
+    outputFile << "from: " << email.from << endl;
+    outputFile << "to: ";
+    for (const auto& recipient : email.to) {
+        outputFile << recipient << " ";
+    }
+    //outputFile << endl;
+    outputFile << "cc: ";
+    for (const auto& cc : email.cc) {
+        outputFile << cc << " ";
+    }
+    //outputFile << endl;
+    outputFile << "bcc: ";
+    for (const auto& bcc : email.bcc) {
+        outputFile << bcc << " ";
+    }
+//    outputFile << endl;
+    outputFile << "content: " << email.content;
+
+    // Ghi thông tin về các file đính kèm
+    outputFile << "attach: ";
+    if (email.hasAttachment) {
+        for (const auto& attachment : email.files) {
+            size_t pos = attachment.find("\n"); // Tìm dấu xuống dòng đầu tiên để tách tên file và nội dung
+            if (pos != string::npos) {
+                string filename = attachment.substr(0, pos); // Lấy tên file
+                string content = attachment.substr(pos + 1); // Lấy nội dung từ sau dấu xuống dòng
+                // Ghi tên file vào file văn bản
+                outputFile << filename << endl;
+                // Ghi nội dung vào file tương ứng
+                ofstream attachmentFile(path + "/" + filename); // Lưu file vào đường dẫn được chỉ định bởi path
+                if (attachmentFile.is_open()) {
+                    attachmentFile << content;
+                    attachmentFile.close();
+                } else {
+                    cerr << "Unable to open attachment file for writing: " << filename << endl;
+                }
+            }
+        }
+    } else {
+        outputFile << "No attachments" << endl;
+    }
+
+    outputFile.close();
 }
 
 // Function to send email headers
@@ -442,18 +566,17 @@ void listEmail(const string& serverIP, int port, const string& username, const s
     } 
     Email result;
     if (temp.find("-alt--") != string::npos){
-	cout << temp;
+	//cout << temp;
 	result = parseEmail(temp);
 	}
-    cout << result.from<<endl;
-    cout << result.subject<<endl;
+    //cout << result.from<<endl;
+    //cout << result.subject<<endl;
 	for(int i = 0 ; i< result.files.size();i++)
-	//if(result.hasAttachment)
 		cout << result.files[i];
 
     send_socket(QUIT); // Quit
     read_socket(); // Log off
-    
+    downEmail(result,".");
     // Close socket
     close(sock);
 }
@@ -580,27 +703,17 @@ void readEmail(const string& serverIP, int port, const string& username, const s
 int main() {
     // Nhập thông tin email từ người dùng
     readConfigFromFile("config.txt");
-    
+    //readConfigFromJSON("filter.json");
+  cout << "Username: " << username << "abc"<<endl;
+  string tmp = username;
+  cout << "Password: " << password << endl;
+  cout << "Mail Server: " << serverIP << endl;
+  cout << "SMTP Port: " << smtpPort << endl;
+  cout << "POP3 Port: " << pop3Port << endl;
+  //cout << "Autoload: " << autoload << endl;
 
-    // Email email = inputEmailInfo();
-
-    // // Gửi email
-    // bool sent = sendEmailSMTP(serverIP, smtpPort, email);
-    // if (sent) {
-    //     cout << "Email sent successfully.\n";
-    // } else {
-    //     cout << "Failed to send email.\n";
-    // }
-
-/*
-    string username, password;
-    cout << "Username: ";
-    cin >> username;
-    cout << "Password: ";
-    cin >> password;
-*/
     // Nhận email từ server POP3
-    listEmail(serverIP, pop3Port, username, password);
+    listEmail(serverIP, pop3Port, tmp, password);
     /*
     string index;
     cout << "Choose email to read: ";

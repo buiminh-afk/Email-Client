@@ -190,17 +190,17 @@ void downEmail(const Email& email, const string& path) {
     outputFile << "from: " << email.from << endl;
     outputFile << "to: ";
     for (const auto& recipient : email.to) {
-        outputFile << recipient << " ";
+        outputFile << recipient;
     }
     //outputFile << endl;
     outputFile << "cc: ";
     for (const auto& cc : email.cc) {
-        outputFile << cc << " ";
+        outputFile << cc;
     }
     //outputFile << endl;
     outputFile << "bcc: ";
     for (const auto& bcc : email.bcc) {
-        outputFile << bcc << " ";
+        outputFile << bcc;
     }
 //    outputFile << endl;
     outputFile << "content: " << email.content;
@@ -211,7 +211,7 @@ void downEmail(const Email& email, const string& path) {
         for (const auto& attachment : email.files) {
             size_t pos = attachment.find("\n"); // Tìm dấu xuống dòng đầu tiên để tách tên file và nội dung
             if (pos != string::npos) {
-                string filename = attachment.substr(0, pos); // Lấy tên file
+                string filename = attachment.substr(5, pos-5); // Lấy tên file
                 string content = attachment.substr(pos + 1); // Lấy nội dung từ sau dấu xuống dòng
                 // Ghi tên file vào file văn bản
                 outputFile << filename << endl;
@@ -459,7 +459,7 @@ Email parseEmail(const string& emailString) {
                 string decoded_content = base64_decode(content);
                 cout << decoded_content<<endl;
                 // Save filename and content to vector
-                email.files.push_back("name"+filename+ "\n"+ decoded_content);
+                email.files.push_back("Name "+filename+ "\n"+ decoded_content);
                
         } else if (line.find("boundary=") != string::npos) {
             size_t pos = line.find("boundary=");

@@ -743,7 +743,6 @@ int main() {
     cout << serverIP << endl;
     // Nhập thông tin email từ người dùng
 <<<<<<< Updated upstream
-
     readConfigFromFile("config.txt");
     //readConfigFromJSON("filter.json");
   cout << "Username: " << username << "abc"<<endl;

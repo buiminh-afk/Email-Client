@@ -167,6 +167,33 @@ string base64_decode(const string &in) {
     return out;
 }
 
+
+string choose(map<string, vector<string>> filters, Email testmail){
+  string tag = "Inbox";
+  for (const auto &folder : filters)
+  {
+    for (const auto &key : folder.second)
+    {
+      if (testmail.from == key)
+      {
+        tag = folder.first;
+        return tag;
+      }
+      else if (testmail.subject == key){
+        tag = folder.first;
+        return tag;
+      }
+      else if (testmail.content.find(key) != string::npos){
+        tag = folder.first;
+        return tag;
+      }
+     
+    }
+
+  }
+  return tag;
+}
+
 // Function to send data to the socket
 void send_socket(const char *s) {
     write(sock, s, strlen(s));
@@ -212,7 +239,8 @@ void downEmail(const Email& email, const string& path) {
         for (const auto& attachment : email.files) {
             size_t pos = attachment.find("\n"); // Tìm dấu xuống dòng đầu tiên để tách tên file và nội dung
             if (pos != string::npos) {
-                string filename = attachment.substr(5, pos-5); // Lấy tên file
+                string filename = attachment.substr(5, pos-5); // Lấy tên file bo di "name "
+                //cout << filename<<" check"<<endl;
                 string content = attachment.substr(pos + 1); // Lấy nội dung từ sau dấu xuống dòng
                 // Ghi tên file vào file văn bản
                 outputFile << filename << endl;
@@ -459,7 +487,7 @@ Email parseEmail(const string& emailString) {
                 string decoded_content = base64_decode(content);
                 cout << decoded_content<<endl;
                 // Save filename and content to vector
-                email.files.push_back("Name "+filename+ "\n"+ decoded_content);
+                email.files.push_back("name "+filename+ "\n"+ decoded_content);
                
         } else if (line.find("boundary=") != string::npos) {
             size_t pos = line.find("boundary=");
@@ -539,10 +567,14 @@ void listEmail(const string& serverIP, int port, const string& username, const s
     buf[len] = '\0';
     string response(buf);
     cout << response;
+    Email result;
 
     // Check if login was successful
     string temp;
     if (response.find(".") != string::npos) {
+	istringstream iss(response);
+	string line;
+	/*    		
     	cout << "choose email to read (number of index, 0 to exit): ";
 	string index;
 	cin >> index;
@@ -554,29 +586,37 @@ void listEmail(const string& serverIP, int port, const string& username, const s
 	    close(sock);
 	    return;
 	}
-	send_socket(RETR);
-    	send_socket(index.c_str());
-        send_socket("\r\n");
-        //read_socket(); // Recipient OK
-        char buff[BUFSIZ+1];
-	int leng = read(sock, buff, BUFSIZ);
-	temp = buff ;
-	
+	*/
+	while (getline(iss,line)){
+	    istringstream indexInput(line);
+	    string index ;
+	    indexInput >> index;
+	    if (index != "+OK"	&& index != "."){
+		cout << index <<endl;
+		send_socket(RETR);
+    		send_socket(index.c_str());
+        	send_socket("\r\n");
+        	//read_socket(); // Recipient OK
+        	char buff[BUFSIZ+1];
+		int leng = read(sock, buff, BUFSIZ);
+		temp = buff ;
+
+	    	if (temp.find("-alt--") != string::npos){
+			//cout << temp;
+			result = parseEmail(temp);
+			string tag = choose(filters,result);
+    			//cout << tag << " haha " <<endl;    
+    			tag+= "/";
+    			downEmail(result,tag);
+		}
+		}
+	}
 	
     } 
-    Email result;
-    if (temp.find("-alt--") != string::npos){
-	//cout << temp;
-	result = parseEmail(temp);
-	}
-    //cout << result.from<<endl;
-    //cout << result.subject<<endl;
-	for(int i = 0 ; i< result.files.size();i++)
-		cout << result.files[i];
-
+    
     send_socket(QUIT); // Quit
     read_socket(); // Log off
-    downEmail(result,".");
+    
     // Close socket
     close(sock);
 }
@@ -702,20 +742,40 @@ int main() {
     readConfigFromFile("config.txt");
     cout << serverIP << endl;
     // Nhập thông tin email từ người dùng
+<<<<<<< Updated upstream
 
     readConfigFromFile("config.txt");
     //readConfigFromJSON("filter.json");
   cout << "Username: " << username << "abc"<<endl;
   string tmp = username;
+=======
+    //readConfigFromFile("config.txt");
+    readConfigFromJSON("filter.json");
+  /*cout << "Username: " << username << "abc"<<endl;
+>>>>>>> Stashed changes
   cout << "Password: " << password << endl;
   cout << "Mail Server: " << serverIP << endl;
   cout << "SMTP Port: " << smtpPort << endl;
   cout << "POP3 Port: " << pop3Port << endl;
+<<<<<<< Updated upstream
   //cout << "Autoload: " << autoload << endl;
 
 
+=======
+  cout << "Autoload: " << autoload << endl;
+  cout << "Filters:\n";
+  for (const auto &folder : filters)
+  {
+    cout << folder.first << ":\n";
+    for (const auto &key : folder.second)
+    {
+      cout << "   " << key << endl;
+    }
+  }
+  */
+>>>>>>> Stashed changes
     // Nhận email từ server POP3
-    listEmail(serverIP, pop3Port, tmp, password);
+    listEmail(serverIP, pop3Port, username, password);
     /*
     string index;
     cout << "Choose email to read: ";

@@ -739,40 +739,19 @@ void readEmail(const string& serverIP, int port, const string& username, const s
 }
 
 int main() {
-    readConfigFromFile("config.txt");
+    //readConfigFromFile("config.txt");
     cout << serverIP << endl;
     // Nhập thông tin email từ người dùng
-<<<<<<< Updated upstream
-    readConfigFromFile("config.txt");
-    //readConfigFromJSON("filter.json");
-  cout << "Username: " << username << "abc"<<endl;
-  string tmp = username;
-=======
     //readConfigFromFile("config.txt");
     readConfigFromJSON("filter.json");
   /*cout << "Username: " << username << "abc"<<endl;
->>>>>>> Stashed changes
   cout << "Password: " << password << endl;
   cout << "Mail Server: " << serverIP << endl;
   cout << "SMTP Port: " << smtpPort << endl;
   cout << "POP3 Port: " << pop3Port << endl;
-<<<<<<< Updated upstream
   //cout << "Autoload: " << autoload << endl;
 
 
-=======
-  cout << "Autoload: " << autoload << endl;
-  cout << "Filters:\n";
-  for (const auto &folder : filters)
-  {
-    cout << folder.first << ":\n";
-    for (const auto &key : folder.second)
-    {
-      cout << "   " << key << endl;
-    }
-  }
-  */
->>>>>>> Stashed changes
     // Nhận email từ server POP3
     listEmail(serverIP, pop3Port, username, password);
     /*

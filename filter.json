@@ -1,0 +1,22 @@
+{
+    "Username": "anhtusocket2@gmail.com",
+    "Password": "123098lk",
+    "MailServer": "192.168.56.1",
+    "SMTP": 2225,
+    "Pop3": 3335,
+    "Autoload": 10,
+    "Filter": {
+        "Project": {
+            "key": ["ahihi@testing.com", "ahuu@testing.com"]
+        },
+        "Important": {
+            "key": ["urgent", "ASAP"]
+        },
+        "Work": {
+            "key": ["report", "meeting"]
+        },
+        "Spam": {
+            "key": ["virus", "hack", "crack"]
+        }
+    }
+}

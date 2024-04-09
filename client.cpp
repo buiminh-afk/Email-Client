@@ -167,6 +167,33 @@ string base64_decode(const string &in) {
     return out;
 }
 
+
+string choose(map<string, vector<string>> filters, Email testmail){
+  string tag = "Inbox";
+  for (const auto &folder : filters)
+  {
+    for (const auto &key : folder.second)
+    {
+      if (testmail.from == key)
+      {
+        tag = folder.first;
+        return tag;
+      }
+      else if (testmail.subject == key){
+        tag = folder.first;
+        return tag;
+      }
+      else if (testmail.content.find(key) != string::npos){
+        tag = folder.first;
+        return tag;
+      }
+     
+    }
+
+  }
+  return tag;
+}
+
 // Function to send data to the socket
 void send_socket(const char *s) {
     write(sock, s, strlen(s));
@@ -193,17 +220,18 @@ void downEmail(const Email& email, const string& path) {
     for (const auto& recipient : email.to) {
         outputFile << recipient;
     }
-    //outputFile << endl;
+    outputFile << endl;
     outputFile << "cc: ";
     for (const auto& cc : email.cc) {
         outputFile << cc;
     }
-    //outputFile << endl;
+    outputFile << endl;
     outputFile << "bcc: ";
     for (const auto& bcc : email.bcc) {
         outputFile << bcc;
     }
-//    outputFile << endl;
+    outputFile << "subject: " << email.subject;
+    outputFile << endl;
     outputFile << "content: " << email.content;
 
     // Ghi thông tin về các file đính kèm
@@ -212,12 +240,13 @@ void downEmail(const Email& email, const string& path) {
         for (const auto& attachment : email.files) {
             size_t pos = attachment.find("\n"); // Tìm dấu xuống dòng đầu tiên để tách tên file và nội dung
             if (pos != string::npos) {
-                string filename = attachment.substr(5, pos-5); // Lấy tên file
+                string filename = attachment.substr(5, pos-5); // Lấy tên file bo di "name "
+                //cout << filename<<" check"<<endl;
                 string content = attachment.substr(pos + 1); // Lấy nội dung từ sau dấu xuống dòng
                 // Ghi tên file vào file văn bản
-                outputFile << filename << endl;
+                outputFile <<"Attach/"<< filename << endl;
                 // Ghi nội dung vào file tương ứng
-                ofstream attachmentFile(path + "/" + filename); // Lưu file vào đường dẫn được chỉ định bởi path
+                ofstream attachmentFile("Attach/" + filename); // Lưu file vào đường dẫn được chỉ định bởi path
                 if (attachmentFile.is_open()) {
                     attachmentFile << content;
                     attachmentFile.close();
@@ -459,7 +488,7 @@ Email parseEmail(const string& emailString) {
                 string decoded_content = base64_decode(content);
                 cout << decoded_content<<endl;
                 // Save filename and content to vector
-                email.files.push_back("Name "+filename+ "\n"+ decoded_content);
+                email.files.push_back("name "+filename+ "\n"+ decoded_content);
                
         } else if (line.find("boundary=") != string::npos) {
             size_t pos = line.find("boundary=");
@@ -499,7 +528,7 @@ bool login(const string& username, const string& password) {
 }
 
 // Function to receive email from POP3 server
-void listEmail(const string& serverIP, int port, const string& username, const string& password) { 
+void autoDownload(const string& serverIP, int port, const string& username, const string& password) { 
     struct hostent *hp;
 
     // Create Socket
@@ -539,10 +568,14 @@ void listEmail(const string& serverIP, int port, const string& username, const s
     buf[len] = '\0';
     string response(buf);
     cout << response;
+    Email result;
 
     // Check if login was successful
     string temp;
     if (response.find(".") != string::npos) {
+	istringstream iss(response);
+	string line;
+	/*    		
     	cout << "choose email to read (number of index, 0 to exit): ";
 	string index;
 	cin >> index;
@@ -554,29 +587,37 @@ void listEmail(const string& serverIP, int port, const string& username, const s
 	    close(sock);
 	    return;
 	}
-	send_socket(RETR);
-    	send_socket(index.c_str());
-        send_socket("\r\n");
-        //read_socket(); // Recipient OK
-        char buff[BUFSIZ+1];
-	int leng = read(sock, buff, BUFSIZ);
-	temp = buff ;
-	
+	*/
+	while (getline(iss,line)){
+	    istringstream indexInput(line);
+	    string index ;
+	    indexInput >> index;
+	    if (index != "+OK"	&& index != "."){
+		cout << index <<endl;
+		send_socket(RETR);
+    		send_socket(index.c_str());
+        	send_socket("\r\n");
+        	//read_socket(); // Recipient OK
+        	char buff[BUFSIZ+1];
+		int leng = read(sock, buff, BUFSIZ);
+		temp = buff ;
+
+	    	if (temp.find("-alt--") != string::npos){
+			//cout << temp;
+			result = parseEmail(temp);
+			string tag = choose(filters,result);
+    			//cout << tag << " haha " <<endl;    
+    			tag+= "/";
+    			downEmail(result,tag);
+		}
+		}
+	}
 	
     } 
-    Email result;
-    if (temp.find("-alt--") != string::npos){
-	//cout << temp;
-	result = parseEmail(temp);
-	}
-    //cout << result.from<<endl;
-    //cout << result.subject<<endl;
-	for(int i = 0 ; i< result.files.size();i++)
-		cout << result.files[i];
-
+    
     send_socket(QUIT); // Quit
     read_socket(); // Log off
-    downEmail(result,".");
+    
     // Close socket
     close(sock);
 }
@@ -644,69 +685,79 @@ Email inputEmailInfo() {
     return email;
 }
 
-void readEmail(const string& serverIP, int port, const string& username, const string& password, const string& index) {
-    struct hostent *hp;
-
-    // Create Socket
-    sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock == -1) {
-        perror("opening stream socket");
-        exit(1);
+// Hàm liệt kê các email trong thư mục được chỉ định
+void listEmails(const string& folderPath) {
+    DIR* dir;
+    struct dirent* entry;
+    if ((dir = opendir(folderPath.c_str())) != NULL) {
+        int count = 0;
+        while ((entry = readdir(dir)) != NULL) {
+            string fileName = entry->d_name;
+            if (fileName != "." && fileName != ".." && fileName.find(".txt") != string::npos) {
+                count++;
+                cout << count << ". " << fileName << endl;
+            }
+        }
+        closedir(dir);
     } else {
-        cout << "Socket created\n";
+        cerr << "Error opening directory." << endl;
+    }
+}
+
+void readEmail(const string& folderPath, const string& emailFileName) {
+    string fileName = folderPath + "/" + emailFileName + ".txt";
+    ifstream inputFile(fileName);
+    if (!inputFile.is_open()) {
+        cerr << "Error opening file: " << fileName << endl;
+        return;
     }
 
-    // Verify host
-    server.sin_family = AF_INET;
-    hp = gethostbyname(serverIP.c_str());
-    if (hp == nullptr) {
-        fprintf(stderr, "%s: unknown host\n", serverIP.c_str());
-        exit(2);
+    // Biến lưu thông tin email
+     Email email;
+
+    // Biến kiểm tra xem đã đọc phần content hay chưa
+    bool contentRead = false;
+
+    // Đọc từng dòng của file email
+    string line,line2;
+    while (getline(inputFile, line)) {
+        
+        if (line.find("attach: ") != string::npos) {
+            string attachPath = line.substr(8); // Lấy phần sau "attach: "
+            email.files.push_back(attachPath);
+            while(getline(inputFile,line2)){
+                email.files.push_back(line2);
+            }
+        }
+        else
+            cout << line << endl;
     }
-
-    // Connect to POP3 server
-    memcpy((char *) &server.sin_addr, (char *) hp->h_addr, hp->h_length);
-    server.sin_port = htons(port);
-    if (connect(sock, (struct sockaddr *) &server, sizeof(server)) == -1) {
-        perror("connecting stream socket");
-        exit(1);
-    } else {
-        cout << "Connected to POP3 server\n";
-    }
-
-
-    if (login(username,password)){
-
-    	send_socket(RETR);
-    	send_socket(index.c_str());
-        send_socket("\r\n");
-        read_socket(); // Recipient OK
-        send_socket(QUIT); // Quit
-    	read_socket(); // Log off
     
-    // Close socket
-    	close(sock);
+    inputFile.close();
+    // In nội dung các file đính kèm (nếu có)
+    for (const string& attachPath : email.files) {
+        //string fullPath = folderPath + "/" + attachPath;
+        cout << "Attachment: " << attachPath << endl;
+        ifstream attachFile(attachPath);
+        if (attachFile.is_open()) {
+            while (getline(attachFile, line)) {
+                cout << line << endl;
+            }
+            attachFile.close();
+        } else {
+            cerr << "Error opening attachment file: " << attachPath << endl;
+        }
     }
-    else{
-    send_socket(QUIT); // Quit
-    read_socket(); // Log off
-    
-    // Close socket
-    close(sock);
-    cout << "out";
-    }
-
 }
 
 int main() {
-    readConfigFromFile("config.txt");
     cout << serverIP << endl;
     // Nhập thông tin email từ người dùng
+    //readConfigFromFile("config.txt");
+    readConfigFromJSON("filter.json");
+    autoDownload(serverIP, pop3Port, username, password);
 
-    readConfigFromFile("config.txt");
-    //readConfigFromJSON("filter.json");
-  cout << "Username: " << username << "abc"<<endl;
-  string tmp = username;
+  /*cout << "Username: " << username << "abc"<<endl;
   cout << "Password: " << password << endl;
   cout << "Mail Server: " << serverIP << endl;
   cout << "SMTP Port: " << smtpPort << endl;
@@ -715,7 +766,6 @@ int main() {
 
 
     // Nhận email từ server POP3
-    listEmail(serverIP, pop3Port, tmp, password);
     /*
     string index;
     cout << "Choose email to read: ";

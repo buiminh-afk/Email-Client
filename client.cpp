@@ -229,11 +229,42 @@ void read_socket()
     write(1, buf, len); // Echo to console
 }
 
-void downEmail(const Email &email, const string &path)
-{
-    ofstream outputFile(path + "/" + email.subject + ".txt");
-    if (!outputFile.is_open())
-    {
+void updateConfigFile(const string& configPath, int newIndex, const string& from, const string& subject) {
+    ofstream configFile(configPath, ios::app); // Mở file để ghi thêm vào cuối file
+    if (configFile.is_open()) {
+        configFile << newIndex << " " << "unread" << " " << from  << subject <<  endl; // Ghi thông tin mới vào file
+        configFile.close(); // Đóng file sau khi ghi
+    } else {
+        cerr << "Error updating config file: " << configPath << endl;
+    }
+}
+
+void downEmail(const Email& email, const string& path) {
+    int currentIndex = 0;
+    string configPath = path + "config.txt";
+    ifstream configFile(configPath);
+    if (configFile.is_open()) {
+        string line;
+        while (getline(configFile, line)) {
+            istringstream iss(line);
+            iss >> currentIndex; // Lấy index cuối cùng từ file
+        }
+        configFile.close(); // Đóng file config.txt
+    } else {
+        cerr << "Error opening config file: " << configPath << endl;
+        return;
+    }
+
+    // Tăng index lên 1 để tạo index mới cho email
+    int newIndex = currentIndex + 1;
+
+    // Lưu thông tin email vào file config.txt
+    updateConfigFile(configPath, newIndex, email.from, email.subject);
+
+    // Lưu email dưới dạng index.txt
+    string emailFilePath = path + "/" + to_string(newIndex) + ".txt";
+    ofstream outputFile(emailFilePath);
+    if (!outputFile.is_open()) {
         cerr << "Unable to open file for writing." << endl;
         return;
     }
@@ -241,56 +272,46 @@ void downEmail(const Email &email, const string &path)
     // Ghi dữ liệu từ biến email vào file
     outputFile << "from: " << email.from << endl;
     outputFile << "to: ";
-    for (const auto &recipient : email.to)
-    {
+    for (const auto& recipient : email.to) {
         outputFile << recipient;
     }
     outputFile << endl;
     outputFile << "cc: ";
-    for (const auto &cc : email.cc)
-    {
+    for (const auto& cc : email.cc) {
         outputFile << cc;
     }
     outputFile << endl;
     outputFile << "bcc: ";
-    for (const auto &bcc : email.bcc)
-    {
+    for (const auto& bcc : email.bcc) {
         outputFile << bcc;
     }
+    outputFile << endl;
     outputFile << "subject: " << email.subject;
     outputFile << endl;
     outputFile << "content: " << email.content;
 
     // Ghi thông tin về các file đính kèm
     outputFile << "attach: ";
-    if (email.hasAttachment)
-    {
-        for (const auto &attachment : email.files)
-        {
+    if (email.hasAttachment) {
+        for (const auto& attachment : email.files) {
             size_t pos = attachment.find("\n"); // Tìm dấu xuống dòng đầu tiên để tách tên file và nội dung
-            if (pos != string::npos)
-            {
-                string filename = attachment.substr(5, pos - 5); // Lấy tên file bo di "name "
-                // cout << filename<<" check"<<endl;
+            if (pos != string::npos) {
+                string filename = attachment.substr(5, pos-5); // Lấy tên file bo di "name "
+
                 string content = attachment.substr(pos + 1); // Lấy nội dung từ sau dấu xuống dòng
                 // Ghi tên file vào file văn bản
-                outputFile << "Attach/" << filename << endl;
+                outputFile <<"Attach/"<< filename << endl;
                 // Ghi nội dung vào file tương ứng
                 ofstream attachmentFile("Attach/" + filename); // Lưu file vào đường dẫn được chỉ định bởi path
-                if (attachmentFile.is_open())
-                {
+                if (attachmentFile.is_open()) {
                     attachmentFile << content;
                     attachmentFile.close();
-                }
-                else
-                {
+                } else {
                     cerr << "Unable to open attachment file for writing: " << filename << endl;
                 }
             }
         }
-    }
-    else
-    {
+    } else {
         outputFile << "No attachments" << endl;
     }
 
@@ -360,7 +381,6 @@ void send_email_headers(const Email &email)
     string subjectHeader = "Subject: " + email.subject + "\r\n";
     send_socket(subjectHeader.c_str());
 }
-
 bool sendEmailSMTP(const string &serverIP, int port, const Email &email)
 {
     struct hostent *hp;
@@ -465,12 +485,34 @@ bool sendEmailSMTP(const string &serverIP, int port, const Email &email)
         ifstream file(attachment, ios::binary);
         if (file.is_open())
         {
-            stringstream buffer;
-            buffer << file.rdbuf();
+            // Allocate a separate buffer for reading file content
+            char buffer[1024];
+            string encodedContent; // Store the entire encoded content
+
+            // Read file content and encode to Base64
+            while (file.read(buffer, sizeof(buffer)))
+            {
+                // Encode buffer content to Base64 and append to encodedContent
+                string content(buffer, file.gcount());
+                encodedContent += base64::to_base64(content);
+            }
+
+            // Encode remaining content and append to encodedContent
+            if (file.gcount() > 0)
+            {
+                string content(buffer, file.gcount());
+                encodedContent += base64::to_base64(content);
+            }
+
             file.close();
-            string content = buffer.str();
-            string encodedContent = base64::to_base64(content);
-            send_socket(encodedContent.c_str());
+
+            // Split encodedContent into smaller chunks and send sequentially
+            const size_t chunkSize = 256; // Adjust as needed
+            for (size_t i = 0; i < encodedContent.length(); i += chunkSize)
+            {
+                string chunk = encodedContent.substr(i, chunkSize) + "\r\n";
+                send_socket(chunk.c_str());
+            }
         }
         else
         {
@@ -479,6 +521,8 @@ bool sendEmailSMTP(const string &serverIP, int port, const Email &email)
 
         send_socket("\r\n");
     }
+
+
 
     send_socket("--boundary-type-1234567892-alt--\r\n");
     send_socket(".\r\n"); // End of data
@@ -503,29 +547,41 @@ Email parseEmail(const string &emailString)
         if (line.empty())
             continue;
 
-        if (line.find("TO: ") == 0)
+        if (line.find("To: ") == 0 || line.find("TO: ") == 0)
         {
+            line.erase(remove(line.begin(), line.end(), '\r'), line.end());
+            line.erase(remove(line.begin(), line.end(), '\n'), line.end());
             email.to.push_back(line.substr(4));
         }
-        else if (line.find("FROM: ") == 0)
+        else if (line.find("From: ") == 0 || line.find("FROM: ") == 0) 
         {
-            email.from = line.substr(6);
-            // cout << email.from;
+            line.erase(remove(line.begin(), line.end(), '\r'), line.end());
+            line.erase(remove(line.begin(), line.end(), '\n'), line.end());
+            size_t pos = line.find("<"); 
+            string sender = line.substr(pos + 1, line.find(">", pos + 1) - pos - 1); 
+            email.from = sender;
+
         }
-        else if (line.find("CC: ") == 0)
+        else if (line.find("Cc: ") == 0 || line.find("CC: ") == 0)
         {
+            line.erase(remove(line.begin(), line.end(), '\r'), line.end());
+            line.erase(remove(line.begin(), line.end(), '\n'), line.end());
             email.cc.push_back(line.substr(4));
         }
-        else if (line.find("BCC: ") == 0)
+        else if (line.find("Bcc: ") == 0 || line.find("BCC: ") == 0)
         {
+            line.erase(remove(line.begin(), line.end(), '\r'), line.end());
+            line.erase(remove(line.begin(), line.end(), '\n'), line.end());
             email.bcc.push_back(line.substr(5));
         }
         else if (line.find("Subject: ") == 0)
         {
+            line.erase(remove(line.begin(), line.end(), '\r'), line.end());
+            line.erase(remove(line.begin(), line.end(), '\n'), line.end());
             email.subject = line.substr(8);
-            // cout << email.subject;
+
         }
-        else if (line.find("Content-Type: text/plain") != string::npos)
+        else if (line.find("Content-Type: text/plain") != string::npos && line.find("name") == string::npos)
         {
             // Skip lines until reach the content part
             while (getline(ss, line) && line.find("Content-Transfer-Encoding:") == string::npos)
@@ -534,7 +590,7 @@ Email parseEmail(const string &emailString)
             getline(ss, line);
             // Read content until boundary
             string content;
-            while (getline(ss, line) && line.find("--" + boundary) == string::npos)
+            while (getline(ss, line) && line.find("--") == string::npos)
             {
                 content += line + "\n";
             }
@@ -550,18 +606,27 @@ Email parseEmail(const string &emailString)
 
             size_t pos = line.find("\"");
             string filename = line.substr(pos + 1, line.find("\"", pos + 1) - pos - 1);
-            cout << filename << endl;
+
             getline(ss, line);
             getline(ss, line);
-            string content;
-            while (getline(ss, line) && line.find("--" + boundary) == string::npos)
-            {
-                content += line + "\n";
+            string filecontent;
+            if(filename.find(".pdf") != string::npos){
+            	while (getline(ss, line) && line.find("--" + boundary) == string::npos)
+            	{
+                	line.erase(remove(line.begin(), line.end(), '\r'), line.end());
+                	line.erase(remove(line.begin(), line.end(), '\n'), line.end());
+                	filecontent += line;
+            	}
             }
-            // cout << content<<endl;
+            else
+            	while (getline(ss, line) && line.find("--" + boundary) == string::npos)
+            	{
+                	filecontent += line +  "\n";
+            	}
+
             //  Decode base64 content
-            string decoded_content = base64_decode(content);
-            cout << decoded_content << endl;
+            string decoded_content = base64_decode(filecontent);
+
             // Save filename and content to vector
             email.files.push_back("name " + filename + "\n" + decoded_content);
         }
@@ -693,17 +758,19 @@ void autoDownload(const string &serverIP, int port, const string &username, cons
         if (getEmailCount(response) > 0)
         {
             cout << "ban co " << getEmailCount(response) << " email.\r\n";
-            for (int i = 0; i < getEmailCount(response); i++)
+            for (int i = 1; i <= getEmailCount(response); i++)
             {
-                string tmp = "RETR " + to_string(i) + "\r\n";
+            	string temp = "";
+            	string tmp = "RETR " + to_string(i) + "\r\n";
                 send_socket(tmp.c_str());
+            	while (temp.find("--\r\n.\r\n") == string::npos){
                 char buff[BUFSIZ + 1];
                 int leng = read(sock, buff, BUFSIZ);
-                string temp = buff;
+                temp += buff;
+		}
 
-                if (temp.find("-alt--") != string::npos)
-                {
-                    // cout << temp;
+                if (temp.find("--\r\n.\r\n") != string::npos)
+                {     
                     result = parseEmail(temp);
                     string tag = choose(filters, result);
                     // cout << tag << " haha " <<endl;
@@ -712,52 +779,7 @@ void autoDownload(const string &serverIP, int port, const string &username, cons
                 }
             }
         }
-        // // Check if login was successful
-        // string temp;
-        // if (response.find(".") != string::npos)
-        // {
-        //     istringstream iss(response);
-        //     string line;
-        //     /*
-        //         cout << "choose email to read (number of index, 0 to exit): ";
-        //     string index;
-        //     cin >> index;
-        //     if(index == "0"){
-        //         send_socket(QUIT);
-        //         read_socket();
-
-        //         close(sock);S
-        //         return;
-        //     }
-        //     */
-        //     while (getline(iss, line))
-        //     {
-        //         istringstream indexInput(line);
-        //         string index;
-        //         indexInput >> index;
-        //         if (index != "+OK" && index != ".")
-        //         {
-        //             cout << index << endl;
-        //             send_socket(RETR);
-        //             send_socket(index.c_str());
-        //             send_socket("\r\n");
-        //             // read_socket(); // Recipient OK
-        //             char buff[BUFSIZ + 1];
-        //             int leng = read(sock, buff, BUFSIZ);
-        //             temp = buff;
-
-        //             if (temp.find("-alt--") != string::npos)
-        //             {
-        //                 // cout << temp;
-        //                 result = parseEmail(temp);
-        //                 string tag = choose(filters, result);
-        //                 // cout << tag << " haha " <<endl;
-        //                 tag += "/";
-        //                 downEmail(result, tag);
-        //             }
-        //         }
-        //     }
-        // }
+        
     }
     send_socket(QUIT); // Quit
     read_socket();     // Log off
@@ -837,35 +859,105 @@ Email inputEmailInfo()
     }
     return email;
 }
+struct EmailInfo {
+    int index;
+    string sender;
+    string subject;
+    string readed;
+};
+
+vector<EmailInfo> listEmail(const string& path) {
+    vector<EmailInfo> emails;
+
+    string configFilePath = path + "/config.txt";
+    ifstream configFile(configFilePath);
+    if (!configFile.is_open()) {
+        cerr << "Error opening config file: " << configFilePath << endl;
+        return emails;
+    }
+
+    string line;
+    while (getline(configFile, line)) {
+        EmailInfo email;
+        istringstream iss(line);
+        if (!(iss >> email.index >>email.readed >> email.sender )) {
+            cerr << "Error parsing config file: " << configFilePath << endl;
+            break;
+        }
+        int pos = line.find(".com");
+        email.subject = line.substr(pos+4);
+
+        emails.push_back(email);
+    }
+
+    configFile.close();
+
+    return emails;
+}
+
 
 // Hàm để liệt kê tất cả các tệp trong một thư mục
 void listFilesInDirectory(const std::string &directoryPath)
-{
-    try
-    {
-        // Kiểm tra xem đường dẫn thư mục có tồn tại không
-        if (fs::exists(directoryPath) && fs::is_directory(directoryPath))
-        {
-            // Lặp qua tất cả các tệp trong thư mục và hiển thị chúng
-            for (const auto &entry : fs::directory_iterator(directoryPath))
-            {
-                std::cout << entry.path().filename() << std::endl;
-            }
-        }
-        else
-        {
-            std::cerr << "Directory does not exist or is not a directory: " << directoryPath << std::endl;
-        }
+{	
+    vector<EmailInfo> emails = listEmail(directoryPath);
+
+    // In thông tin các email ra màn hình
+    for (const auto& email : emails) {
+        cout << "Index: " << email.index << endl;
+       	if (email.readed == "unread")
+       		cout << "Unread" <<endl;
+        cout << "Sender: " << email.sender << endl;
+        cout << "Subject: " << email.subject << endl;
+        cout << "-------------------" << endl;
     }
-    catch (const std::exception &e)
-    {
-        std::cerr << "Error while listing files: " << e.what() << std::endl;
+
+}
+
+void changeUnread(int index , string& path) {
+    index--;
+    ifstream inFile(path);
+    vector<string> lines;
+    string line;
+
+    // Đọc tất cả các dòng từ tệp vào vector
+    while (getline(inFile, line)) {
+        lines.push_back(line);
+    }
+
+    // Kiểm tra xem index có hợp lệ không
+    if (index < 0 || index >= lines.size()) {
+        cout << "Index out of range." << endl;
+        return;
+    }
+
+    // Thay đổi từ "unread" thành "read" trên dòng có index tương ứng
+    size_t found = lines[index].find("unread");
+    cout << found << " pos unread " << endl;
+    if (found != string::npos) {
+        lines[index].replace(found, 6, "read"); // 6 là độ dài của từ "unread"
+    }
+
+
+    inFile.close();
+
+    // Ghi lại tất cả các dòng vào tệp
+    ofstream outFile(path);
+    if (outFile.is_open()) {
+        for (const string& modifiedLine : lines) {
+            outFile << modifiedLine << endl;
+        }
+        //cout << "File updated successfully." << endl;
+    } else {
+        cerr << "Error opening file for writing." << endl;
     }
 }
 
-void readEmail(const string &folderPath, const string &emailFileName)
+void readEmail(const string &folderPath, const int emailFileName)
 {
-    string fileName = folderPath + "/" + emailFileName + ".txt";
+
+    string fileName = folderPath + "/" + to_string(emailFileName) + ".txt";
+    string configFile = folderPath + "/config.txt";
+    changeUnread(emailFileName,configFile);
     ifstream inputFile(fileName);
     if (!inputFile.is_open())
     {
@@ -926,14 +1018,55 @@ int main()
     // readConfigFromFile("config.txt");
     readConfigFromJSON("filter.json");
     autoDownload(serverIP, pop3Port, username, password);
-    // Nhận email từ server POP3
-    /*
-    string index;
-    cout << "Choose email to read: ";
-    cin >> index;
-    cout << index;
-    readEmail(serverIP, pop3Port, username, password, index);
-    */
-    // Đóng socket
+    int choice = 0;
+    while (choice != 3)  {
+        cout << "Menu" << endl;
+        cout << "1. Send Email" << endl;
+        cout << "2. See the Mailbox" << endl;
+        cout << "3. Exit" << endl;
+        cout << "You choose: "; cin >> choice;
+        while (choice < 1 || choice > 3) {
+            cout << "Please enter again: "; 
+            cin >> choice;
+        }
+        switch (choice)
+        {
+        case 1: {
+            cin.ignore();
+            // Nhập thông tin email từ người dùng
+            Email email = inputEmailInfo();
+            // Gửi email
+            bool sent = sendEmailSMTP(serverIP, smtpPort, email);
+            if (sent) {
+                cout << "Email sent successfully.\n";
+            } else {
+                cout << "Failed to send email.\n";
+            }
+            close(sock);
+            break;
+        }
+        case 2: {
+            cout << "Enter the folder to read the email: (Inbox, Important, Work, Project, Spam) ";
+    	    string folderPath ;
+            cin>>folderPath;
+
+	    // Liệt kê các email trong thư mục
+	    cout << "List of Emails in Folder " << folderPath << ":" << endl;
+	    listFilesInDirectory(folderPath);
+
+	    // Chọn email để đọc
+	    int emailIndex;
+	    cout << "Enter the index of the email you want to read: ";
+	    cin >> emailIndex;
+
+	    // Đọc và in email
+ 	    cout << "Reading Email " << emailIndex << ":" << endl;
+ 	    readEmail(folderPath, emailIndex);
+ 	    break;
+        }
+        case 3:
+            break;
+        }
+    }
     return 0;
 }

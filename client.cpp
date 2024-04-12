@@ -886,10 +886,7 @@ vector<EmailInfo> listEmail(const string& path) {
         }
         int pos = line.find(".com");
         email.subject = line.substr(pos+4);
-        //getline(configFile, email.subject);
-        // Remove leading and trailing whitespaces
-        //email.subject.erase(0, email.subject.find_first_not_of(" \t\n\r\f\v"));
-        //email.subject.erase(email.subject.find_last_not_of(" \t\n\r\f\v") + 1);
+
         emails.push_back(email);
     }
 

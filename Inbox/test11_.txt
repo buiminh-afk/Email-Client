@@ -1,7 +1,0 @@
-from: <anhtu>
-to: anhtusocket2@gmail.com
-cc: 
-bcc: 
-content: asdknxcvasdgcxvb sdfg sdfgxc vsdfg '/n' ibregfujhzfva wjbdf bf xvs
-
-attach: Attach/message.txt

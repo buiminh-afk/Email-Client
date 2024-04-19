@@ -1,8 +1,0 @@
-from: <anhtu@gmail.com>
-to: anhtusocket2@gmail.com
-cc: haha
-bcc: congviec@company.com
-subject: test_1234_
-content: asfdnxcvasdfcxvasdfxcvasdfcxvasdfv afd cvase vsdvxc
-
-attach: Attach/fiel.txt 

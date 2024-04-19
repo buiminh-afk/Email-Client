@@ -1,8 +1,0 @@
-from: <anhtukute@gmail.com>
-to: anhtusocket2@gmail.com
-cc: haha
-bcc: congviecsubject:  nghiemtuc123
-content: asdlf naerugbb serguijhsenrjigldbkfsretdjkhnrsjkbndxfbsdfgdfsghsefgser gsdfsdf bsdf xcv bsb dbcvbsdrf g sdfb35 report asdf uerjanfdvjse
-
-attach: Attach/attach.txt
-Attach/attach2.txt

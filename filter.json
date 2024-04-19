@@ -1,22 +1,36 @@
 {
-    "Username": "buinguyennhatminh911@gmail.com",
-    "Password": "09112003Minh!!\\",
-    "MailServer": "192.168.56.1",
-    "SMTP": 2225,
-    "Pop3": 3335,
-    "Autoload": 10,
+    "Autoload": 10000,
     "Filter": {
-        "Project": {
-            "key": ["ahihi@testing.com", "ahuu@testing.com"]
-        },
         "Important": {
-            "key": ["urgent", "ASAP"]
+            "key": [
+                "urgent",
+                "ASAP"
+            ]
         },
-        "Work": {
-            "key": ["report", "meeting"]
+        "Project": {
+            "key": [
+                "bnnminh21@clc.fitus.edu.vn",
+                "ahuu@testing.com"
+            ]
         },
         "Spam": {
-            "key": ["virus", "hack", "crack"]
+            "key": [
+                "virus",
+                "hack",
+                "crack"
+            ]
+        },
+        "Work": {
+            "key": [
+                "report",
+                "meeting"
+            ]
         }
-    }
+    },
+    "MailServer": "192.168.56.1",
+    "Password": "09112003Minh!!\\",
+    "Pop3": 3335,
+    "SMTP": 2225,
+    "Username": "buinguyennhatminh911@gmail.com",
+    "last_id_download": 5
 }

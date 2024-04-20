@@ -550,6 +550,7 @@ bool sendEmailSMTP(const string &serverIP, int port, const Email &email)
                 // Encode buffer content to Base64 and append to encodedContent
                 string content(buffer, file.gcount());
                 encodedContent += base64::to_base64(content);
+                
             }
 
             // Encode remaining content and append to encodedContent
@@ -590,7 +591,7 @@ bool sendEmailSMTP(const string &serverIP, int port, const Email &email)
 Email parseEmail(const string &emailString)
 {
     Email email;
-
+    cout << emailString;
     stringstream ss(emailString);
     string line;
     string boundary;
@@ -662,20 +663,26 @@ Email parseEmail(const string &emailString)
             getline(ss, line);
             getline(ss, line);
             string filecontent;
-            if (filename.find(".pdf") != string::npos)
-            {
-                while (getline(ss, line) && line.find("--" + boundary) == string::npos)
+            while (getline(ss, line) && line.find("--" + boundary) == string::npos)
                 {
                     line.erase(remove(line.begin(), line.end(), '\r'), line.end());
                     line.erase(remove(line.begin(), line.end(), '\n'), line.end());
                     filecontent += line;
                 }
-            }
-            else
-                while (getline(ss, line) && line.find("--" + boundary) == string::npos)
-                {
-                    filecontent += line + "\n";
-                }
+            // if (filename.find(".pdf") != string::npos)
+            // {
+            //     while (getline(ss, line) && line.find("--" + boundary) == string::npos)
+            //     {
+            //         line.erase(remove(line.begin(), line.end(), '\r'), line.end());
+            //         line.erase(remove(line.begin(), line.end(), '\n'), line.end());
+            //         filecontent += line;
+            //     }
+            // }
+            // else
+            //     while (getline(ss, line) && line.find("--") == string::npos)
+            //     {
+            //         filecontent += line + "\n";
+            //     }
 
             //  Decode base64 content
             string decoded_content = base64_decode(filecontent);
@@ -1088,7 +1095,6 @@ int main()
 {
     // Doc file config JSON
     readConfigFromJSON("filter.json");
-    cout << "LAST ID: " << last_index_download << endl;
     // Set up auto download
     Timer t = Timer();
     t.setInterval([&]()

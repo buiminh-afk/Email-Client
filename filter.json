@@ -1,5 +1,5 @@
 {
-    "Autoload": 10000,
+    "Autoload": 60000,
     "Filter": {
         "Important": {
             "key": [
@@ -27,10 +27,10 @@
             ]
         }
     },
-    "MailServer": "192.168.56.1",
-    "Password": "09112003Minh!!\\",
+    "MailServer": "",
+    "Password": "",
     "Pop3": 3335,
     "SMTP": 2225,
-    "Username": "buinguyennhatminh911@gmail.com",
-    "last_id_download": 11
+    "Username": "",
+    "last_id_download": 0
 }

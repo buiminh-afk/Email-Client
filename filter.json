@@ -1,5 +1,5 @@
 {
-    "Autoload": 60000,
+    "Autoload": 10000,
     "Filter": {
         "Important": {
             "key": [
@@ -32,5 +32,5 @@
     "Pop3": 3335,
     "SMTP": 2225,
     "Username": "buinguyennhatminh911@gmail.com",
-    "last_id_download": 0
+    "last_id_download": 11
 }

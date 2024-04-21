@@ -38,7 +38,7 @@ struct sockaddr_in server;
 #define STAT "STAT\r\n"
 #define USER "USER your_username\r\n"
 #define PASS "PASS your_password\r\n"
-#define MaxSize 5000
+#define MaxSize 3000
 // #define HELO "EHLO [127.0.0.1]\r\n"
 
 //Update last id download
@@ -218,30 +218,18 @@ string base64_decode(const string &in)
     return out;
 }
 
-string choose(map<string, vector<string>> filters, Email testmail)
-{
+string choose(map<string, vector<string>> filters, Email testmail) {
     string tag = "Inbox";
-    for (const auto &folder : filters)
-    {
-        for (const auto &key : folder.second)
-        {
-            if (testmail.from == key)
-            {
-                tag = folder.first;
-                return tag;
-            }
-            else if (testmail.subject == key)
-            {
-                tag = folder.first;
-                return tag;
-            }
-            else if (testmail.content.find(key) != string::npos)
-            {
+    cout << testmail.from;
+    for (const auto &folder : filters) {
+        for (const auto &key : folder.second) {
+            if (testmail.from.find(key) != string::npos || testmail.subject.find(key) != string::npos || testmail.content.find(key) != string::npos) {
                 tag = folder.first;
                 return tag;
             }
         }
     }
+    cout << "TAG: " << tag << endl;
     return tag;
 }
 
@@ -451,7 +439,7 @@ bool sendEmailSMTP(const string &serverIP, int port, const Email &email)
     }
     else
     {
-        cout << "Socket created\n";
+        // cout << "Socket created\n";
     }
 
     // Verify host
@@ -473,7 +461,7 @@ bool sendEmailSMTP(const string &serverIP, int port, const Email &email)
     }
     else
     {
-        cout << "Connected to SMTP server\n";
+        // cout << "Connected to SMTP server\n";
     }
 
     // SMTP communication
@@ -591,7 +579,6 @@ bool sendEmailSMTP(const string &serverIP, int port, const Email &email)
 Email parseEmail(const string &emailString)
 {
     Email email;
-    cout << emailString;
     stringstream ss(emailString);
     string line;
     string boundary;
@@ -722,12 +709,12 @@ bool login(const string &username, const string &password)
     // Check if login was successful
     if (response.find("+OK") != string::npos)
     {
-        cout << "Login successful.\n";
+        // cout << "Login successful.\n";
         return true;
     }
     else
     {
-        cout << "Login failed.\n";
+        // cout << "Login failed.\n";
         return false;
     }
 }
@@ -779,7 +766,7 @@ void autoDownload(const string &serverIP, int port, const string &username, cons
     }
     else
     {
-        std::cout << "Socket created\n";
+        // std::cout << "Socket created\n";
     }
 
     // Verify host
@@ -801,7 +788,7 @@ void autoDownload(const string &serverIP, int port, const string &username, cons
     }
     else
     {
-        std::cout << "Connected to POP3 server\n";
+        // std::cout << "Connected to POP3 server\n";
     }
 
     if (login(username, password))
@@ -818,8 +805,6 @@ void autoDownload(const string &serverIP, int port, const string &username, cons
         int i;
         if (numberOfEmail > 0)
         {
-            cout << "ban co " << numberOfEmail << " email.\r\n";
-            cout << last_index_download << " + " << numberOfEmail << endl;
             for (i = last_index_download+1; i <= numberOfEmail; i++)
             {
                 string temp = "";
@@ -918,7 +903,7 @@ Email inputEmailInfo()
             getline(cin, temp, '\n');
             while (getFileSize(temp) > MaxSize) {
                 temp.clear();
-                cout << "File must be < 5mb\nEnter again: ";
+                cout << "File must be < 3mb\nEnter again: ";
                 getline(cin, temp, '\n');
             }
             email.files.push_back(temp);
@@ -1002,13 +987,13 @@ void changeUnread(int index, string &path)
     // Kiểm tra xem index có hợp lệ không
     if (index < 0 || index >= lines.size())
     {
-        cout << "Index out of range." << endl;
+        // cout << "Index out of range." << endl;
         return;
     }
 
     // Thay đổi từ "unread" thành "read" trên dòng có index tương ứng
     size_t found = lines[index].find("unread");
-    cout << found << " pos unread " << endl;
+    // cout << found << " pos unread " << endl;
     if (found != string::npos)
     {
         lines[index].replace(found, 6, "read"); // 6 là độ dài của từ "unread"
